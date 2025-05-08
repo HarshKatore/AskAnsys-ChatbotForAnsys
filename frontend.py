@@ -1,89 +1,50 @@
-from rag_pipeline import answer_query, retrieve_docs, llm_model
+from rag_pipeline import answer_query, llm_model
+from vector_database import upload_pdf, load_pdf, create_chunks, create_vector_store, load_vector_store
 import streamlit as st
+import os
 
-# Configure Ansys theme and page settings
-st.set_page_config(
-    page_title="AskAnsys - Your Engineering Assistant",
-    page_icon="🔧",
-    layout="wide"
-)
+# Initialize session state for vector store
+if 'vector_store' not in st.session_state:
+    st.session_state.vector_store = load_vector_store()
 
-# Custom CSS for Ansys styling
-st.markdown("""
-    <style>
-    .stApp {
-        background-color: #f8f9fa;
-    }
-    .main {
-        padding: 2rem;
-    }
-    .st-emotion-cache-1c7y2kd {
-        background-color: #0066A1;  /* Ansys Blue */
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-    }
-    .st-emotion-cache-1c7y2kd:hover {
-        background-color: #004d7a;
-    }
-    .st-emotion-cache-16idsys {
-        border-color: #0066A1;
-    }
-    .st-bw {
-        color: #333333;  /* Ansys Dark Gray */
-    }
-    </style>
-""", unsafe_allow_html=True)
+# Setup Upload PDF functionality
+uploaded_file = st.file_uploader("Upload PDF",
+                                type="pdf",
+                                accept_multiple_files=False)
 
-# Header with Ansys branding
-st.markdown("""
-    <div style='text-align: center; padding: 2rem;'>
-        <h1 style='color: #0066A1; margin-bottom: 0;'>AskAnsys</h1>
-        <p style='color: #666666; font-size: 1.2em;'>Your Engineering Simulation Assistant</p>
-    </div>
-""", unsafe_allow_html=True)
+# Chatbot interface
+user_query = st.text_area("Enter your prompt: ", height=150, placeholder="Ask Anything!")
 
-# Create columns for better layout
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.markdown("### Upload Engineering Documentation")
-    uploaded_file = st.file_uploader(
-        "Upload your Ansys documentation (PDF)",
-        type="pdf",
-        accept_multiple_files=False,
-        help="Upload Ansys manuals, guides, or documentation in PDF format"
-    )
-
-st.markdown("---")
-
-# Chat interface
-st.markdown("### Engineering Query Interface")
-user_query = st.text_area(
-    "What would you like to know about Ansys?",
-    height=100,
-    placeholder="Ask about Ansys simulations, setup, analysis, or any engineering queries..."
-)
-
-# Center the button
-col1, col2, col3 = st.columns([1, 1, 1])
-with col2:
-    ask_question = st.button("Ask AskAnsys", use_container_width=True)
+ask_question = st.button("Ask AI Assistant")
 
 if ask_question:
-    if uploaded_file and user_query:
-        st.markdown("---")
-        # User message
-        st.chat_message("user", avatar="👤").write(user_query)
+    if uploaded_file:
+        # Process PDF and update vector store if needed
+        upload_pdf(uploaded_file)
+        documents = load_pdf(os.path.join('pdfs', uploaded_file.name))
+        text_chunks = create_chunks(documents)
+        st.session_state.vector_store = create_vector_store(text_chunks)
         
-        # RAG Pipeline
-        retrieved_docs=retrieve_docs(user_query)
-        response=answer_query(documents=retrieved_docs, model=llm_model, query=user_query)
+        # Display user message
+        st.chat_message("user").write(user_query)
         
-        # Assistant message with Ansys branding
-        st.chat_message("assistant", avatar="🔧").write(response)
-    
-    elif not uploaded_file:
-        st.error("📚 Please upload an Ansys documentation file (PDF) first!")
+        # Get response using RAG pipeline
+        if st.session_state.vector_store:
+            retrieved_docs = st.session_state.vector_store.similarity_search(user_query)
+            response = answer_query(documents=retrieved_docs, model=llm_model, query=user_query)
+            
+            # Clean up the response to show only the main content
+            if hasattr(response, 'content'):
+                clean_response = response.content
+            else:
+                clean_response = str(response)
+            
+            # Remove thinking process and metadata if present
+            if '<think>' in clean_response:
+                clean_response = clean_response.split('</think>')[-1].strip()
+            
+            st.chat_message("AI Assistant").write(clean_response)
+        else:
+            st.error("Error: Could not process the document. Please try again.")
     else:
-        st.error("❓ Please enter your engineering query!")
+        st.error("Please upload a valid PDF file first!")
