@@ -164,7 +164,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Contact
 
 For questions, feature requests, or support, please contact:
-- Harsh Katore - harsh.katore@ansys.com
+- Harsh Katore - harshkatore16@gmail.com
 
 ## Acknowledgments
 
