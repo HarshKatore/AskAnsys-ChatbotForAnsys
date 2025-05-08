@@ -21,8 +21,8 @@ def load_pdf(file_path):
 # Step 2: Create Chunks
 def create_chunks(documents): 
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size = 1000,
-        chunk_overlap = 200,
+        chunk_size = 500,  # Reduced from 1000 for faster processing
+        chunk_overlap = 50,  # Reduced from 200 for faster processing
         add_start_index = True
     )
     text_chunks = text_splitter.split_documents(documents)

@@ -3,9 +3,11 @@ from vector_database import upload_pdf, load_pdf, create_chunks, create_vector_s
 import streamlit as st
 import os
 
-# Initialize session state for vector store
+# Initialize session state
 if 'vector_store' not in st.session_state:
     st.session_state.vector_store = load_vector_store()
+if 'processed_files' not in st.session_state:
+    st.session_state.processed_files = set()
 
 # Setup Upload PDF functionality
 uploaded_file = st.file_uploader("Upload PDF",
@@ -19,27 +21,31 @@ ask_question = st.button("Ask AI Assistant")
 
 if ask_question:
     if uploaded_file:
-        # Process PDF and update vector store if needed
-        upload_pdf(uploaded_file)
-        documents = load_pdf(os.path.join('pdfs', uploaded_file.name))
-        text_chunks = create_chunks(documents)
-        st.session_state.vector_store = create_vector_store(text_chunks)
+        # Only process PDF if it hasn't been processed before
+        if uploaded_file.name not in st.session_state.processed_files:
+            with st.spinner('Processing Provided Documents...'):
+                upload_pdf(uploaded_file)
+                documents = load_pdf(os.path.join('pdfs', uploaded_file.name))
+                text_chunks = create_chunks(documents)
+                st.session_state.vector_store = create_vector_store(text_chunks)
+                st.session_state.processed_files.add(uploaded_file.name)
         
         # Display user message
         st.chat_message("user").write(user_query)
         
-        # Get response using RAG pipeline
+        # Get response using RAG pipeline with progress indicator
         if st.session_state.vector_store:
-            retrieved_docs = st.session_state.vector_store.similarity_search(user_query)
-            response = answer_query(documents=retrieved_docs, model=llm_model, query=user_query)
+            with st.spinner('Searching for answer...'):
+                # Limit number of retrieved docs for faster processing
+                retrieved_docs = st.session_state.vector_store.similarity_search(user_query, k=3)
+                response = answer_query(documents=retrieved_docs, model=llm_model, query=user_query)
             
-            # Clean up the response to show only the main content
+            # Clean up response
             if hasattr(response, 'content'):
                 clean_response = response.content
             else:
                 clean_response = str(response)
             
-            # Remove thinking process and metadata if present
             if '<think>' in clean_response:
                 clean_response = clean_response.split('</think>')[-1].strip()
             
